@@ -4,6 +4,8 @@ require "minitest"
 require "mocha"
 
 class GithubHookControllerTest < ActionController::TestCase
+  include ActiveJob::TestHelper
+
   def json
     # Sample JSON post from http://github.com/guides/post-receive-hooks
     '{
@@ -83,6 +85,7 @@ class GithubHookControllerTest < ActionController::TestCase
   end
 
   def test_should_render_response_from_github_hook_when_done
+    ENV['GITHUB_HOOK_ASYNC'] = 'false'
     GithubHook::Updater.any_instance.expects(:update_repository).returns(true)
     do_post
     assert_response :success
@@ -90,6 +93,7 @@ class GithubHookControllerTest < ActionController::TestCase
   end
 
   def test_should_render_response_from_github_hook_when_done_with_empty_sys_api_key
+    ENV['GITHUB_HOOK_ASYNC'] = 'false'
     GithubHook::Updater.any_instance.expects(:update_repository).returns(true)
     with_settings :sys_api_key => '' do
       do_post :key => 'wrong_key'
@@ -99,6 +103,7 @@ class GithubHookControllerTest < ActionController::TestCase
   end
 
   def test_disabled_ws_should_respond_with_403
+    ENV['GITHUB_HOOK_ASYNC'] = 'false'
     with_settings :sys_api_enabled => '0' do
       do_post
       assert_response 403
@@ -106,11 +111,13 @@ class GithubHookControllerTest < ActionController::TestCase
   end
 
   def test_wrong_key_should_respond_with_403
+    ENV['GITHUB_HOOK_ASYNC'] = 'false'
     do_post :key => 'wrong_key'
     assert_response 403
   end
 
   def test_should_render_error_message
+    ENV['GITHUB_HOOK_ASYNC'] = 'false'
     GithubHook::Updater
       .any_instance
       .expects(:update_repository)
@@ -124,30 +131,43 @@ class GithubHookControllerTest < ActionController::TestCase
   end
 
   def test_should_not_require_login
+    ENV['GITHUB_HOOK_ASYNC'] = 'false'
     GithubHook::Updater.any_instance.expects(:update_repository).returns(true)
     @controller.expects(:check_if_login_required).never
     do_post
   end
 
   def test_exec_should_log_output_from_git_as_debug_when_things_go_well
+    ENV['GITHUB_HOOK_ASYNC'] = 'false'
     GithubHook::Updater.any_instance.expects(:system).at_least(1).returns(true)
     @controller.logger.expects(:debug).at_least(1)
     do_post
   end
 
   def test_exec_should_log_output_from_git_as_error_when_things_go_sour
+    ENV['GITHUB_HOOK_ASYNC'] = 'false'
     GithubHook::Updater.any_instance.expects(:system).at_least(1).returns(false)
     @controller.logger.expects(:error).at_least(1)
     do_post
   end
 
   def test_should_respond_to_get
+    ENV['GITHUB_HOOK_ASYNC'] = 'false'
     get :index, :key => 'my_secret_key'
     assert_response :success
   end
 
   def test_wrong_key_should_respond_to_get_with_403
+    ENV['GITHUB_HOOK_ASYNC'] = 'false'
     get :index, :key => 'wrong_key'
     assert_response 403
+  end
+
+  def test_update_repository_job_should_perform_later
+    ENV['GITHUB_HOOK_ASYNC'] = 'true'
+    assert_enqueued_with(job: GithubHook::UpdateRepositoryJob) do
+      do_post
+      assert_response :success
+    end
   end
 end

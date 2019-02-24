@@ -5,9 +5,15 @@ class GithubHookController < ApplicationController
   skip_before_filter :verify_authenticity_token, :check_if_login_required
 
   def index
-    message_logger = GithubHook::MessageLogger.new(logger)
-    update_repository(message_logger) if request.post?
-    messages = message_logger.messages.map { |log| log[:message] }
+    if request.post?
+      if ENV['GITHUB_HOOK_ASYNC'] == 'false'
+        message_logger = GithubHook::MessageLogger.new(logger)
+        update_repository(message_logger)
+        messages = message_logger.messages.map { |log| log[:message] }
+      else
+        GithubHook::UpdateRepositoryJob.perform_later(params)
+      end
+    end
     render(:json => messages)
 
   rescue ActiveRecord::RecordNotFound => error
